@@ -41,3 +41,19 @@ export function composer(initial = '', onInput) {
   ta.addEventListener('input', upd); upd();
   return { ta, c, el: h('div', {}, ta, c), set(v) { ta.value = v; upd(); } };
 }
+
+export const THEMES = ['dark', 'dim', 'light'];
+export function applyTheme(t = localStorage.getItem('theme') || 'dark') { document.documentElement.dataset.theme = t; localStorage.setItem('theme', t); }
+applyTheme();
+/** Convert a datetime-local value interpreted in an IANA timezone to unix seconds. */
+export function zonedToUnix(local, zone) {
+  const [d, t] = local.split('T'); const [Y, M, D] = d.split('-').map(Number); const [h, m] = t.split(':').map(Number);
+  let guess = Date.UTC(Y, M - 1, D, h, m);
+  for (let i = 0; i < 2; i++) {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(guess)).map((p) => [p.type, p.value]));
+    const asUtc = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute);
+    guess += Date.UTC(Y, M - 1, D, h, m) - asUtc;
+  }
+  return Math.floor(guess / 1000);
+}
+export const ZONES = (Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : ['UTC']);

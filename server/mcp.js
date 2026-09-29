@@ -2,6 +2,7 @@
 import * as core from './core.js';
 import { ai } from './ai.js';
 import { kvGet } from './db.js';
+import * as I from './insights.js';
 
 const S = (props, req = []) => ({ type: 'object', properties: props, required: req });
 const str = { type: 'string' }, num = { type: 'number' };
@@ -25,6 +26,10 @@ const tools = {
   generate_posts: { d: 'AI: generate posts in saved voice', s: S({ topic: str, count: num }, ['topic']), run: async (db, a) => ai.posts(db, { ...a, voice: await kvGet(db, 'voice', '') }) },
   generate_thread: { d: 'AI: generate a thread', s: S({ topic: str, length: num }, ['topic']), run: async (db, a) => ai.thread(db, { ...a, voice: await kvGet(db, 'voice', '') }) },
   rewrite_post: { d: 'AI: rewrite a post', s: S({ text: str, tone: str }, ['text']), run: async (db, a) => ai.rewrite(db, { ...a, voice: await kvGet(db, 'voice', '') }) },
+  tweet_test: { d: 'Score a draft post 0-100 vs your own baseline', s: S({ accountId: num, text: str }, ['accountId', 'text']), run: (db, a) => I.tweetTest(db, a.accountId, a.text) },
+  ai_shield: { d: 'Estimate whether a reply is AI-generated', s: S({ text: str }, ['text']), run: async (_db, a) => I.aiShield(a.text) },
+  search_viral: { d: 'Search your saved viral library', s: S({ q: str, niche: str }), run: (db, a) => db.all('SELECT text,author,likes,niche FROM viral WHERE text LIKE ? AND niche LIKE ? ORDER BY likes DESC LIMIT 25', `%${a.q || ''}%`, `%${a.niche || ''}%`) },
+  best_times: { d: 'Best posting times (UTC) from your data + audience activity', s: S({ accountId: num }, ['accountId']), run: async (db, a) => (await core.bestTimes(db, a.accountId)).slice(0, 8) },
   sync_account: { d: 'Refresh analytics from X', s: S({ accountId: num }, ['accountId']), run: (db, a) => core.syncAccount(db, a.accountId) },
 };
 

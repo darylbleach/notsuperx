@@ -1,9 +1,10 @@
-import { h, api, toast, fmt, when, DOW, copy, state, tz, composer, xLen } from './lib.js';
+import { h, api, toast, fmt, when, DOW, copy, state, tz, composer, xLen, ZONES, zonedToUnix, THEMES, applyTheme } from './lib.js';
 import { toolsPage } from './tools.js';
+import { insights, inbox, timelines, articles } from './pages2.js';
 
 export const nav = [
-  ['dashboard', '📊 Analytics'], ['compose', '✍️ Compose'], ['queue', '🗓 Scheduler'], ['ai', '✨ AI Writer'],
-  ['inspiration', '🔥 Inspiration'], ['engage', '💬 Engage'], ['automations', '⚙️ Automations'],
+  ['dashboard', '📊 Analytics'], ['insights', '🧠 Insights'], ['compose', '✍️ Compose'], ['queue', '🗓 Scheduler'], ['ai', '✨ AI Writer'], ['articles', '📰 Articles'],
+  ['inspiration', '🔥 Inspiration'], ['engage', '💬 Engage'], ['inbox', '📥 Inbox'], ['timelines', '📡 Timelines'], ['automations', '⚙️ Automations'],
   ['agents', '🎯 Signal Agents'], ['tools', '🧰 Free Tools'], ['settings', '🔧 Settings'],
 ];
 const acct = () => state.account;
@@ -52,6 +53,7 @@ async function compose() {
   const draft = JSON.parse(sessionStorage.getItem('draft') || '{}'); sessionStorage.removeItem('draft');
   const c = composer(draft.text || '');
   const when_ = h('input', { type: 'datetime-local' });
+  const zone = h('select', { style: 'width:auto' }, ZONES.map((z) => h('option', { value: z, selected: z === Intl.DateTimeFormat().resolvedOptions().timeZone }, z)));
   const bsky = h('input', { type: 'checkbox', style: 'width:auto' });
   const media = []; const prev = h('div', { class: 'row' });
   const file = h('input', { type: 'file', accept: 'image/*,video/mp4', multiple: true, onchange: async (e) => {
@@ -64,7 +66,7 @@ async function compose() {
   const send = (mode) => async () => {
     try {
       const body = { accountId: acct(), text: c.ta.value, mode, bluesky: bsky.checked, media, tz: tz() };
-      if (mode === 'schedule') body.scheduledAt = Math.floor(new Date(when_.value).getTime() / 1000);
+      if (mode === 'schedule') body.scheduledAt = zonedToUnix(when_.value, zone.value);
       const p = await api('/posts', { body });
       toast(p.status === 'posted' ? 'Posted!' : p.status === 'failed' ? 'Failed: ' + p.error : `Saved (${p.status}${p.scheduled_at ? ' @ ' + when(p.scheduled_at) : ''})`, p.status === 'failed');
       if (p.status !== 'failed') { c.set(''); media.length = 0; prev.replaceChildren(); }
@@ -75,7 +77,7 @@ async function compose() {
     h('div', { class: 'row' }, h('label', { style: 'margin:0' }, bsky, ' Cross-post to Bluesky', state.status.bluesky ? '' : ' (not configured)')),
     h('div', { class: 'row', style: 'margin-top:12px' },
       h('button', { onclick: send('now') }, 'Post now'), h('button', { onclick: send('queue') }, 'Add to queue (smart slot)'),
-      when_, h('button', { class: 'ghost', onclick: send('schedule') }, 'Schedule'), h('button', { class: 'ghost', onclick: send('draft') }, 'Save draft'))));
+      when_, zone, h('button', { class: 'ghost', onclick: send('schedule') }, 'Schedule'), h('button', { class: 'ghost', onclick: send('draft') }, 'Save draft'))));
 }
 
 /* ---------------- Scheduler ---------------- */
@@ -172,7 +174,13 @@ async function inspiration() {
   const dq = h('input', { placeholder: 'Discovery query, e.g. "saas founder" or "(indie hacker OR bootstrapped)"' }), dn = h('input', { placeholder: 'Niche label' }), dl = h('input', { type: 'number', value: 100, style: 'width:100px' });
   const mt = h('textarea', { placeholder: 'Paste a great post to save…' }), ma = h('input', { placeholder: '@author' }), ml = h('input', { type: 'number', placeholder: 'likes', style: 'width:100px' });
   const trends = h('div', {});
+  const today = await api('/inspiration/today').catch(() => []); const niches = await api('/niches').catch(() => []);
+  const nq = h('textarea', { style: 'min-height:80px', placeholder: 'One per line: name | search query | min likes' }, niches.map((n) => `${n.name} | ${n.query} | ${n.minLikes ?? 50}`).join('\n'));
+  const cq = h('input', { placeholder: 'Find creators: topic query' }), cout = h('div', {});
   return h('div', {}, h('h2', {}, 'Inspiration'),
+    h('div', { class: 'card' }, h('h3', {}, 'Today\'s viral picks'), h('p', { class: 'mute' }, 'Refreshed daily at 06:00 UTC for your niches (below).'), today.length ? today.slice(0, 15).map((v) => h('div', { class: 'post' }, v.text, h('div', { class: 'mute' }, `@${v.author} · ${fmt(v.likes)} ♥ · ${v.niche}`))) : h('span', { class: 'mute' }, 'Nothing yet. Set niches and run.'),
+      h('label', {}, 'Daily niches'), nq, h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { onclick: async () => { await api('/niches', { method: 'PUT', body: { niches: nq.value.split('\n').map((l) => l.split('|').map((x) => x.trim())).filter((p) => p[1]).map((p) => ({ name: p[0], query: p[1], minLikes: +p[2] || 50 })) } }); toast('Saved'); } }, 'Save niches'), h('button', { class: 'ghost', onclick: async (e) => { e.target.disabled = true; try { const r = await api('/inspiration/run', { method: 'POST', body: {} }); toast(`Saved ${r.saved}`); location.reload(); } catch (x) { toast(x.message, true); } } }, 'Run now'))),
+    h('div', { class: 'card' }, h('h3', {}, 'Social discovery hub'), h('p', { class: 'mute' }, 'Find and network with creators in your niche, ranked by engagement.'), h('div', { class: 'row' }, cq, h('button', { onclick: async () => { try { const r = await api('/discover/creators', { body: { accountId: acct(), query: cq.value, niche: cq.value } }); cout.replaceChildren(h('table', {}, r.map((c) => h('tr', {}, h('td', {}, h('a', { href: 'https://x.com/' + c.username, target: '_blank' }, '@' + c.username)), h('td', {}, fmt(c.followers)), h('td', {}, c.bio), h('td', {}, h('button', { class: 'ghost', onclick: async () => { await api('/engage/targets', { body: { accountId: acct(), username: c.username } }); toast('Added to Engage targets'); } }, '+ Engage')))))); } catch (e) { toast(e.message, true); } } }, 'Find creators')), cout),
     h('div', { class: 'card' }, h('h3', {}, 'Discover viral posts in your niche'), h('p', { class: 'mute' }, 'Searches recent posts via the X API and keeps those above a like threshold, building your own library.'),
       h('div', { class: 'row' }, dq, dn, dl, h('button', { onclick: async (e) => { e.target.disabled = true; try { const r = await api('/viral/discover', { body: { accountId: acct(), query: dq.value, niche: dn.value, minLikes: +dl.value } }); toast(`Saved ${r.saved}`); load(); } catch (x) { toast(x.message, true); } e.target.disabled = false; } }, 'Discover'))),
     h('div', { class: 'card' }, h('h3', {}, 'Trends'), h('button', { class: 'ghost', onclick: async () => { try { const r = await api(`/trends?account=${acct()}`); trends.replaceChildren(...(r.data || []).map((t) => h('span', { class: 'tag', style: 'margin:3px;cursor:pointer', onclick: () => { sessionStorage.setItem('draft', JSON.stringify({ text: '' })); toast('Go to AI Writer → From trend with: ' + t.trend_name); } }, t.trend_name + (t.post_count ? ` · ${fmt(t.post_count)}` : '')))); } catch (x) { toast(x.message, true); } } }, 'Load trending now'), trends),
@@ -242,6 +250,14 @@ async function agents() {
 }
 
 /* ---------------- Settings ---------------- */
+async function limitsCard() {
+  const { limits, usage, presets } = await api('/limits'); const inputs = {};
+  const keys = [['postsPerMonth', 'Posts / month'], ['aiCredits', 'AI calls / month'], ['autoDmsPerMonth', 'Auto DMs / month'], ['leadsPerDay', 'Leads / day'], ['accounts', 'Accounts']];
+  return h('div', { class: 'card' }, h('h3', {}, 'Limits (0 = unlimited)'), h('p', { class: 'mute' }, 'Guardrails to control X/AI API spend. Presets mirror SuperX plans.'),
+    h('div', { class: 'row' }, Object.keys(presets).map((p) => h('button', { class: 'ghost', onclick: async () => { await api('/limits', { method: 'PUT', body: presets[p] }); location.reload(); } }, p))),
+    h('table', {}, keys.map(([k, l]) => h('tr', {}, h('td', {}, l), h('td', {}, inputs[k] = h('input', { type: 'number', value: limits[k] || 0, style: 'width:110px' })), h('td', { class: 'mute' }, `used ${usage[k]}`)))),
+    h('button', { onclick: async () => { await api('/limits', { method: 'PUT', body: Object.fromEntries(keys.map(([k]) => [k, +inputs[k].value || 0])) }); toast('Saved'); } }, 'Save limits'));
+}
 async function settings() {
   const keys = await api('/keys');
   const s = state.status;
@@ -251,6 +267,8 @@ async function settings() {
       h('table', {}, state.accounts.map((a) => h('tr', {}, h('td', {}, h('img', { src: a.avatar, width: 28, style: 'border-radius:50%;vertical-align:middle' }), ' @' + a.username), h('td', {}, fmt(a.followers) + ' followers'),
         h('td', {}, h('button', { class: 'danger', onclick: async () => { if (confirm('Disconnect and delete its data?')) { await api('/accounts/' + a.id, { method: 'DELETE' }); location.reload(); } } }, 'Remove'))))),
       h('div', { style: 'margin-top:10px' }, h('a', { class: 'btn', href: '/auth/x/start' }, 'Connect X account'))),
+    h('div', { class: 'card' }, h('h3', {}, 'Theme'), h('div', { class: 'row' }, THEMES.map((t) => h('button', { class: 'ghost', onclick: () => applyTheme(t) }, t)))),
+    await limitsCard(),
     h('div', { class: 'card' }, h('h3', {}, 'Integrations'), h('div', {}, `AI: ${s.ai ? '✅' : '❌'} · Bluesky: ${s.bluesky ? '✅' : '❌'} · X app: ${s.x ? '✅' : '❌'}`)),
     h('div', { class: 'card' }, h('h3', {}, 'API keys (REST, CLI, MCP, Chrome extension)'),
       h('table', {}, keys.map((k) => h('tr', {}, h('td', {}, k.name), h('td', {}, when(k.created_at)), h('td', {}, h('button', { class: 'danger', onclick: async () => { await api('/keys/' + k.id, { method: 'DELETE' }); location.reload(); } }, 'Revoke'))))),
@@ -259,4 +277,4 @@ async function settings() {
     h('div', { class: 'card' }, h('button', { class: 'ghost', onclick: async () => { await api('/logout', { method: 'POST', body: {} }); location.hash = '#/login'; location.reload(); } }, 'Sign out')));
 }
 
-export const pages = { dashboard, compose, queue, ai: aiPage, inspiration, engage, automations, agents, tools: toolsPage, settings };
+export const pages = { insights, inbox, timelines, articles, dashboard, compose, queue, ai: aiPage, inspiration, engage, automations, agents, tools: toolsPage, settings };
