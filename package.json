@@ -3,12 +3,19 @@
   "version": "1.0.0",
   "description": "Self-hosted X (Twitter) growth suite: scheduler, analytics, AI writer, automations, extension, API, CLI, MCP",
   "type": "module",
-  "engines": { "node": ">=22.13" },
-  "bin": { "notsuperx": "cli/notsuperx.js" },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "bin": {
+    "notsuperx": "cli/notsuperx.js",
+    "notsuperx-mcp": "cli/mcp-stdio.js"
+  },
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server/node.js",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "dev:mock": "node --disable-warning=ExperimentalWarning mock/dev.js",
+    "mock": "node mock/mock-x.js"
   },
   "license": "MIT"
 }

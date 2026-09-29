@@ -86,7 +86,7 @@ export const ai = {
       prompt: `Profile: ${JSON.stringify(profile)}\nTop posts: ${JSON.stringify(topPosts)}\nStats: ${JSON.stringify(stats)}`,
     }),
 
-  bio: async (db, { about, count = 5 }) =>
+  bio: async (db, { about, count = 8 }) =>
     parseList(await claude(db, {
       kind: 'bio', max: 800, system: 'Write X bios, <=160 chars each. Return ONLY a JSON array of strings.',
       prompt: `Write ${count} bios for: ${about}`,

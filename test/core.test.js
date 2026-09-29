@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openNodeDb } from '../server/db.js';
+import { openNodeDb } from '../server/db-node.js';
 import { initConfig } from '../server/config.js';
 import { handle } from '../server/app.js';
 import * as core from '../server/core.js';

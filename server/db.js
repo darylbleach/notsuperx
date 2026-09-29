@@ -12,27 +12,6 @@ export function wrapD1(d1) {
   };
 }
 
-export async function openNodeDb(file = ':memory:') {
-  const { DatabaseSync } = await import('node:sqlite');
-  const fs = await import('node:fs'), path = await import('node:path');
-  if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
-  const db = new DatabaseSync(file);
-  db.exec('PRAGMA foreign_keys=ON;');
-  const norm = (a) => a.map((x) => (x === undefined ? null : x));
-  const w = {
-    kind: 'node',
-    async all(sql, ...a) { return db.prepare(sql).all(...norm(a)); },
-    async get(sql, ...a) { return db.prepare(sql).get(...norm(a)); },
-    async run(sql, ...a) { const r = db.prepare(sql).run(...norm(a)); return { changes: Number(r.changes), lastId: Number(r.lastInsertRowid) }; },
-    async exec(text) { db.exec(text); },
-  };
-  // apply migrations
-  for (const f of fs.readdirSync(new URL('../migrations/', import.meta.url)).sort()) {
-    db.exec(fs.readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf8'));
-  }
-  return w;
-}
-
 export const kvGet = async (db, k, d = null) => {
   const r = await db.get('SELECT v FROM kv WHERE k=?', k);
   return r ? JSON.parse(r.v) : d;

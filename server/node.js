@@ -3,7 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { initConfig } from './config.js';
-import { openNodeDb } from './db.js';
+import { openNodeDb } from './db-node.js';
 import { handle } from './app.js';
 import { cronTick } from './core.js';
 

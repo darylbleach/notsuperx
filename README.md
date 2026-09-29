@@ -3,17 +3,13 @@
 Self-hosted X (Twitter) growth suite on Cloudflare Workers + D1. Zero runtime dependencies.
 
 ## Features
-| Area | What |
-|---|---|
-| Scheduler | Compose, drafts, calendar, auto-thread split, media, smart queue (custom slots or best-performing hours), Bluesky cross-post |
-| Analytics | Impressions/engagement/followers, post-type breakdown, best-time heatmap, follower snapshots, CSV export |
-| AI | Posts, threads, rewrite, trend posts, ready-to-post from your viral library, reply ideas, X Article + SVG cover, chat, voice profile |
-| Inspiration | Viral library (discover via X search, manual add, Chrome-extension save), trends |
-| Engage | Target-account reply-opportunity feed, AI reply suggestions, unified mentions across accounts |
-| Automations | Auto retweet, auto plug, auto DM, auto delete (dry-run) — cron every 15 min |
-| Signal agents | Saved X searches → leads, follower filter, AI-personalized auto DM, CSV |
-| Free tools | Char counter, thread splitter, tweet→image, fake tweet, banner, LinkedIn formatter, templates, engagement calc, valuation, bio/roadmap AI, profile audit, username/follower lookup, shadowban heuristic, media downloader, bulk deleter, optimal time |
-| Access | Web app, Chrome extension (`extension/`), REST API (Bearer key), CLI (`cli/notsuperx.js`), MCP server (`POST /mcp`) |
+See **`docs/FEATURE_MAP.md`** for the full SuperX → NotSuperX mapping with status of every feature (built / partly built / not buildable and why).
+
+Highlights: smart scheduler with time zones and Bluesky · analytics + growth intelligence · AI writer/threads/rewrite/replies/articles in your voice · viral library with daily niche discovery · engage feed, inbox (replies/quotes), unified mentions, AI Shield · auto retweet/plug/DM/delete · signal agents · custom timelines · creator discovery · tweet tester, profile analytics/audit/valuation for any profile · 31 free tools · Chrome extension · REST + CLI + MCP · optional plan limits.
+
+Docs: `docs/SUPERX_RESEARCH.md` (what SuperX offers) · `docs/FEATURE_MAP.md` · `docs/GAPS.md` · `docs/X_API_NOTES.md` · `docs/TESTING.md` · `HANDOVER.md`.
+
+Try it now with dummy data and no keys: `npm run dev:mock` → http://localhost:8787 (password `pw`).
 
 ## Deploy (Cloudflare)
 1. D1 database `notsuperx` is created and migrated; its id is in `wrangler.toml`.
@@ -30,7 +26,7 @@ Self-hosted X (Twitter) growth suite on Cloudflare Workers + D1. Zero runtime de
 5. Open the URL, sign in, Settings → Connect X account.
 
 ## Local
-`cp .env.example .env && npm start` (Node ≥ 22.13, uses `node:sqlite`). `npm test` runs the suite.
+`cp .env.example .env && npm start` (Node ≥ 22.13, uses `node:sqlite`). `npm test` runs the suite; `npm run dev:mock` runs everything against dummy X data.
 
 ## Chrome extension
 `chrome://extensions` → Developer mode → Load unpacked → `extension/`. Set server URL + API key in options.
@@ -43,7 +39,4 @@ node cli/notsuperx.js mcp      # prints MCP client config
 ```
 
 ## Honest limits
-- X API is paid per usage; that cost is yours. Heavy sync/search/agents can exceed $50/mo.
-- No 10M-post library ships with this; you build your own (Discover, extension, manual).
-- X has no public API for publishing X Articles or reading audience demographics; Article writer outputs copy-ready markdown.
-- Best-time and shadowban features are heuristics from your own data / search visibility.
+See `docs/GAPS.md`. Short version: X API is pay-per-use (your cost); no 10M-post dataset; X Articles can't be published via API; audience demographics aren't available; nothing has yet run against live X.
