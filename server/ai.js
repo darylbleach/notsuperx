@@ -2,7 +2,7 @@ import { config } from './config.js';
 
 export async function claude(db, { system, prompt, max = 1500, kind = 'ai', temperature = 0.9 }) {
   if (!config.anthropicKey) throw new Error('ANTHROPIC_API_KEY not set');
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
+  const r = await fetch(`${config.anthropicBase}/v1/messages`, {
     method: 'POST',
     headers: { 'x-api-key': config.anthropicKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({ model: config.model, max_tokens: max, temperature, system, messages: [{ role: 'user', content: prompt }] }),
@@ -100,4 +100,41 @@ export const ai = {
 
   chat: (db, { messages, voice }) =>
     claude(db, { kind: 'chat', system: RULES + voiceBlock(voice), prompt: messages.map((m) => `${m.role}: ${m.content}`).join('\n') }),
+
+  factCheck: (db, { text }) =>
+    claude(db, {
+      kind: 'factcheck', max: 900, temperature: 0.2,
+      system: 'You fact-check X posts. Output markdown: Verdict (True / Mostly true / Misleading / False / Unverifiable), the checkable claims, what is known, and what to verify. Say clearly when you cannot verify recent events. Never invent sources.',
+      prompt: text,
+    }),
+
+  profileChat: (db, { profile, posts, question }) =>
+    claude(db, {
+      kind: 'profilechat', max: 1000, temperature: 0.4,
+      system: 'You answer questions about an X profile using ONLY the supplied profile data and recent posts. Be concrete and brief.',
+      prompt: `PROFILE: ${JSON.stringify(profile)}\nRECENT POSTS: ${JSON.stringify(posts)}\nQUESTION: ${question || 'Summarize this account.'}`,
+    }),
+
+  roast: (db, { posts }) =>
+    claude(db, {
+      kind: 'roast', max: 1500, temperature: 0.9,
+      system: 'You roast an X account, funny but useful. Score each of up to 40 posts 0-10 on reading value, list the 3 worst and 3 best with a one-line reason each, then an overall score and one sentence of advice. Markdown.',
+      prompt: posts.map((p, i) => `${i + 1}. ${p}`).join('\n'),
+    }),
+
+  doomscroll: async (db, { posts, niche }) => {
+    const txt = await claude(db, {
+      kind: 'doomscroll', max: 1500, temperature: 0.2,
+      system: 'Classify each post as Read, Pass or Not Sure for someone interested in the niche. Return ONLY a JSON array of {"i":number,"verdict":"Read|Pass|Not Sure","why":string}.',
+      prompt: `Niche: ${niche}\n` + posts.map((p, i) => `${i}. ${p}`).join('\n'),
+    });
+    try { return JSON.parse(txt.match(/\[[\s\S]*\]/)[0]); } catch { return []; }
+  },
+
+  write: async (db, { kind = 'text', topic, length = 'medium', voice }) => {
+    const spec = { tweets: 'Write 3 ready-to-post tweets. Return ONLY a JSON array of strings.', text: 'Write clear, readable text. No filler.', paragraph: 'Write one focused paragraph. No filler.', content: 'Write a post/caption/copy piece.', story: 'Write a short story with a complete narrative arc.', writer: 'Write naturally and clearly.' }[kind] || 'Write clearly.';
+    const len = { short: 'Keep it short.', medium: 'Medium length.', long: 'Long and thorough.' }[length] || '';
+    const out = await claude(db, { kind: 'write-' + kind, max: length === 'long' ? 3500 : 1500, system: RULES.replace('<= 280 chars unless it is an X Article', 'length as instructed') + voiceBlock(voice), prompt: `${spec} ${len}\nTopic: ${topic}` });
+    return kind === 'tweets' ? parseList(out) : out;
+  },
 };

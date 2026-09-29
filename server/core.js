@@ -1,7 +1,8 @@
 import { XClient, classify } from './x.js';
 import { crosspost, bskyEnabled } from './bluesky.js';
 import { ai } from './ai.js';
-import { kvGet } from './db.js';
+import { kvGet, kvSet } from './db.js';
+import { recordAudience, audienceGrid } from './insights.js';
 
 export const now = () => Math.floor(Date.now() / 1000);
 const J = (s, d) => { try { return JSON.parse(s); } catch { return d; } };
@@ -35,18 +36,48 @@ export async function nextSlot(db, accountId, after = now(), tzMinutes = 0) {
   return after + 3600;
 }
 
-/** Best posting times from historical engagement: avg weighted engagement by dow/hour (UTC). */
+/** Best posting times: blend of your own per-hour performance (60%) and when your engagers are active (40%), UTC. */
 export async function bestTimes(db, accountId) {
   const rows = await db.all('SELECT created_at, likes, replies, reposts, quotes, bookmarks FROM metrics WHERE account_id=? AND created_at IS NOT NULL', accountId);
   const cells = new Map();
+  const cell = (dow, hour) => { const key = `${dow}-${hour}`; if (!cells.has(key)) cells.set(key, { dow, hour, n: 0, eng: 0, audience: 0 }); return cells.get(key); };
   for (const r of rows) {
     const d = new Date(r.created_at * 1000);
-    const key = `${d.getUTCDay()}-${d.getUTCHours()}`;
-    const eng = r.likes + r.replies * 3 + r.reposts * 2 + r.quotes * 2 + r.bookmarks;
-    const c = cells.get(key) || { dow: d.getUTCDay(), hour: d.getUTCHours(), n: 0, eng: 0 };
-    c.n++; c.eng += eng; cells.set(key, c);
+    const c = cell(d.getUTCDay(), d.getUTCHours());
+    c.n++; c.eng += r.likes + r.replies * 3 + r.reposts * 2 + r.quotes * 2 + r.bookmarks;
   }
-  return [...cells.values()].map((c) => ({ ...c, score: c.eng / c.n })).sort((a, b) => b.score - a.score);
+  const grid = await audienceGrid(db, accountId);
+  for (const [k, v] of Object.entries(grid)) { const [d, h] = k.split('-').map(Number); cell(d, h).audience = v; }
+  const list = [...cells.values()].map((c) => ({ ...c, own: c.n ? c.eng / c.n : 0 }));
+  const maxOwn = Math.max(1e-9, ...list.map((c) => c.own)), maxAud = Math.max(1e-9, ...list.map((c) => c.audience));
+  const hasAud = list.some((c) => c.audience > 0);
+  return list.map((c) => ({ ...c, score: hasAud ? (0.6 * c.own / maxOwn + 0.4 * c.audience / maxAud) * maxOwn : c.own })).sort((a, b) => b.score - a.score);
+}
+
+/* ---------- Plan limits (0 = unlimited). Presets mirror SuperX tiers; edit in Settings. ---------- */
+
+export const LIMIT_PRESETS = {
+  unlimited: { postsPerMonth: 0, aiCredits: 0, autoDmsPerMonth: 0, leadsPerDay: 0, accounts: 0 },
+  pro: { postsPerMonth: 500, aiCredits: 750, autoDmsPerMonth: 1000, leadsPerDay: 750, accounts: 5 },
+  advanced: { postsPerMonth: 500, aiCredits: 1500, autoDmsPerMonth: 1000, leadsPerDay: 3000, accounts: 5 },
+  ultra: { postsPerMonth: 3000, aiCredits: 4000, autoDmsPerMonth: 5000, leadsPerDay: 7500, accounts: 10 },
+};
+const monthStart = () => { const d = new Date(); return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000); };
+export async function usage(db) {
+  const ms = monthStart(), ds = now() - (now() % 86400);
+  return {
+    postsPerMonth: (await db.get("SELECT COUNT(*) n FROM posts WHERE status IN ('scheduled','posting','posted') AND created_at>=?", ms)).n,
+    aiCredits: (await db.get('SELECT COUNT(*) n FROM ai_usage WHERE created_at>=?', ms)).n,
+    autoDmsPerMonth: (await db.get("SELECT COUNT(*) n FROM auto_log WHERE action='dm' AND created_at>=?", ms)).n + (await db.get('SELECT COUNT(*) n FROM leads WHERE dm_sent=1 AND created_at>=?', ms)).n,
+    leadsPerDay: (await db.get('SELECT COUNT(*) n FROM leads WHERE created_at>=?', ds)).n,
+    accounts: (await db.get('SELECT COUNT(*) n FROM accounts')).n,
+  };
+}
+export async function enforce(db, key, add = 1) {
+  const lim = (await kvGet(db, 'limits', LIMIT_PRESETS.unlimited))[key] || 0;
+  if (!lim) return;
+  const used = (await usage(db))[key];
+  if (used + add > lim) { const e = new Error(`Plan limit reached: ${key} ${used}/${lim}. Change it in Settings → Limits.`); e.status = 429; e.limit = true; throw e; }
 }
 
 /* ---------- Publishing ---------- */
@@ -111,8 +142,13 @@ export async function syncAccount(db, accountId) {
     accountId, new Date().toISOString().slice(0, 10), pm.followers_count || 0, pm.following_count || 0);
 
   let n = 0;
-  const tl = await client.timeline({ max: 100 });
-  for (const t of tl.data || []) {
+  const all = []; let page;
+  for (let i = 0; i < 3; i++) {
+    const tl = await client.timeline({ max: 100, page });
+    all.push(...(tl.data || [])); page = tl.meta?.next_token; if (!page) break;
+  }
+  await recordAudience(db, client, accountId).catch(() => {});
+  for (const t of all) {
     const p = t.public_metrics || {}, np = t.non_public_metrics || {};
     await db.run(`INSERT INTO metrics(x_post_id,account_id,text,created_at,type,impressions,likes,replies,reposts,quotes,bookmarks,link_clicks,profile_clicks,fetched_at)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -193,7 +229,7 @@ export async function runAutomations(db) {
             for (const t of m.data || []) {
               if (t.author_id === client.acc.x_user_id || (await done(a, t.author_id, 'dm'))) continue;
               if (cfg.keyword && !t.text.toLowerCase().includes(cfg.keyword.toLowerCase())) continue;
-              await client.sendDm(t.author_id, cfg.text); await log(a, t.author_id, 'dm', t.text.slice(0, 80));
+              await enforce(db, 'autoDmsPerMonth'); await client.sendDm(t.author_id, cfg.text); await log(a, t.author_id, 'dm', t.text.slice(0, 80));
             }
           }
         }
@@ -215,12 +251,14 @@ export async function runAgents(db, onlyId) {
     for (const t of r.data || []) {
       const u = users.get(t.author_id);
       if (!u || (u.public_metrics?.followers_count || 0) < ag.min_followers) continue;
+      try { await enforce(db, 'leadsPerDay'); } catch { break; }
       const ins = await db.run('INSERT OR IGNORE INTO leads(agent_id,x_user_id,username,name,followers,x_post_id,text) VALUES(?,?,?,?,?,?,?)',
         ag.id, u.id, u.username, u.name, u.public_metrics?.followers_count || 0, t.id, t.text);
       if (!ins.changes) continue;
       found++;
       if (ag.auto_dm) {
         try {
+          await enforce(db, 'autoDmsPerMonth');
           const msg = await ai.dm(db, { lead: { username: u.username, name: u.name, bio: u.description, post: t.text }, template: ag.auto_dm, voice }).catch(() => ag.auto_dm);
           await client.sendDm(u.id, msg);
           await db.run('UPDATE leads SET dm_sent=1 WHERE agent_id=? AND x_user_id=?', ag.id, u.id);
@@ -243,8 +281,29 @@ export async function cronTick(db, date = new Date()) {
     await step('automations', () => runAutomations(db));
     await step('agents', () => runAgents(db));
   }
+  if (m === 0 && date.getUTCHours() === 6) await step('daily-inspiration', () => dailyInspiration(db));
   if (m === 0) {
     await step('sync', async () => { for (const a of await db.all('SELECT id FROM accounts')) await syncAccount(db, a.id).catch((e) => console.error('sync', e.message)); });
   }
   return out;
+}
+
+/* ---------- Daily viral inspiration (per configured niche) ---------- */
+
+export async function dailyInspiration(db) {
+  const niches = await kvGet(db, 'niches', []);
+  const acc = await db.get('SELECT id FROM accounts ORDER BY id LIMIT 1');
+  if (!acc || !niches.length) return 0;
+  const client = await clientFor(db, acc.id); let saved = 0;
+  for (const n of niches) {
+    const r = await client.search(`${n.query} -is:retweet -is:reply lang:en`, 100).catch(() => ({ data: [] }));
+    const users = new Map((r.includes?.users || []).map((u) => [u.id, u]));
+    const top = (r.data || []).filter((t) => (t.public_metrics?.like_count || 0) >= (n.minLikes ?? 50)).sort((a, b) => b.public_metrics.like_count - a.public_metrics.like_count).slice(0, n.perDay || 10);
+    for (const t of top) {
+      const u = users.get(t.author_id); const m = t.public_metrics;
+      saved += (await db.run('INSERT INTO viral(x_post_id,author,text,likes,reposts,replies,views,niche,url,source) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(x_post_id) DO UPDATE SET saved_at=unixepoch(), source=\'daily\'',
+        t.id, u?.username, t.text, m.like_count, m.retweet_count, m.reply_count, m.impression_count || 0, n.name || n.query, `https://x.com/${u?.username}/status/${t.id}`, 'daily')).changes;
+    }
+  }
+  return saved;
 }

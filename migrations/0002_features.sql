@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS timelines(id INTEGER PRIMARY KEY, account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE, name TEXT, query TEXT DEFAULT '', users TEXT DEFAULT '[]', created_at INTEGER DEFAULT (unixepoch()));
+CREATE TABLE IF NOT EXISTS creators(id INTEGER PRIMARY KEY, account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE, x_user_id TEXT, username TEXT, name TEXT, followers INTEGER, niche TEXT DEFAULT '', bio TEXT DEFAULT '', saved INTEGER DEFAULT 0, UNIQUE(account_id, x_user_id));
+CREATE TABLE IF NOT EXISTS templates(id INTEGER PRIMARY KEY, title TEXT, category TEXT DEFAULT 'custom', body TEXT, created_at INTEGER DEFAULT (unixepoch()));
+CREATE TABLE IF NOT EXISTS articles(id INTEGER PRIMARY KEY, account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE, title TEXT, markdown TEXT DEFAULT '', cover_svg TEXT DEFAULT '', status TEXT DEFAULT 'draft', updated_at INTEGER DEFAULT (unixepoch()));
+CREATE TABLE IF NOT EXISTS handled(account_id INTEGER, x_post_id TEXT, PRIMARY KEY(account_id, x_post_id));

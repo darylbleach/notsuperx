@@ -1,12 +1,11 @@
 import { config } from './config.js';
 
-const PDS = 'https://bsky.social/xrpc';
 let session = null;
 
 async function login() {
   if (!config.bskyHandle || !config.bskyPassword) throw new Error('Bluesky not configured');
   if (session && session.exp > Date.now()) return session;
-  const r = await fetch(`${PDS}/com.atproto.server.createSession`, {
+  const r = await fetch(`${config.bskyBase}/com.atproto.server.createSession`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ identifier: config.bskyHandle, password: config.bskyPassword }),
   });
@@ -33,7 +32,7 @@ export async function crosspost(parts) {
       });
     }
     if (parent) record.reply = { root, parent };
-    const r = await fetch(`${PDS}/com.atproto.repo.createRecord`, {
+    const r = await fetch(`${config.bskyBase}/com.atproto.repo.createRecord`, {
       method: 'POST', headers: { 'content-type': 'application/json', Authorization: `Bearer ${s.accessJwt}` },
       body: JSON.stringify({ repo: s.did, collection: 'app.bsky.feed.post', record }),
     });

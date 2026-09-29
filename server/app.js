@@ -5,6 +5,7 @@ import { bskyEnabled } from './bluesky.js';
 import * as X from './x.js';
 import * as core from './core.js';
 import { handleMcp } from './mcp.js';
+import { install } from './routes2.js';
 
 const enc = new TextEncoder();
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -40,8 +41,12 @@ const routes = [];
 const r = (method, path, fn) => routes.push([method, new RegExp('^' + path.replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$'), fn]);
 
 /* ---- auth / session ---- */
-r('POST', '/api/login', async ({ body }) => {
-  if (!body.password || !safeEq(await sha256(body.password), await sha256(config.password))) return fail('Wrong password', 401);
+r('POST', '/api/login', async ({ req, db, body }) => {
+  const ip = req.headers.get('cf-connecting-ip') || req.headers.get('x-forwarded-for') || 'local', rk = 'rl:' + ip;
+  const rl = await kvGet(db, rk, { n: 0, at: 0 });
+  if (rl.n >= 8 && Date.now() - rl.at < 900000) return fail('Too many attempts. Try again in 15 minutes.', 429);
+  if (!body.password || !safeEq(await sha256(body.password), await sha256(config.password))) { await kvSet(db, rk, { n: (Date.now() - rl.at < 900000 ? rl.n : 0) + 1, at: Date.now() }); return fail('Wrong password', 401); }
+  await kvDel(db, rk);
   const exp = Date.now() + 30 * 864e5;
   return json({ ok: true }, 200, { 'set-cookie': `nsx=${exp}.${await hmac('s' + exp)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${30 * 86400}` });
 });
@@ -66,6 +71,7 @@ r('GET', '/auth/x/callback', async ({ db, url }) => {
   const t = await X.exchangeCode(code, st.verifier);
   const tmp = new X.XClient(db, { access_token: t.access_token, expires_at: Math.floor(Date.now() / 1000) + t.expires_in });
   const me = (await tmp.me()).data;
+  if (!(await db.get('SELECT 1 x FROM accounts WHERE x_user_id=?', me.id))) await core.enforce(db, 'accounts');
   await db.run(`INSERT INTO accounts(x_user_id,username,name,avatar,access_token,refresh_token,expires_at,followers,following)
     VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(x_user_id) DO UPDATE SET username=excluded.username,name=excluded.name,avatar=excluded.avatar,
     access_token=excluded.access_token,refresh_token=excluded.refresh_token,expires_at=excluded.expires_at`,
@@ -93,6 +99,8 @@ r('POST', '/api/posts', async ({ db, body }) => {
   let parts = body.thread?.length ? [text, ...body.thread] : autoThread ? core.splitThread(text) : [text];
   const over = parts.findIndex((t) => t.length > 280);
   if (over >= 0) return fail(`Part ${over + 1} exceeds 280 chars`);
+  if (mode !== 'draft') await core.enforce(db, 'postsPerMonth');
+  for (const m of media) if ((m.dataUrl?.length || 0) > 2_000_000) return fail('Media too large (>~1.5MB). Use smaller files.');
   let status = 'draft', at = null;
   if (mode === 'schedule') { status = 'scheduled'; at = scheduledAt; if (!at || at < core.now() - 60) return fail('scheduledAt must be in the future'); }
   if (mode === 'queue') { status = 'scheduled'; at = await core.nextSlot(db, accountId, core.now(), tz); }
@@ -152,6 +160,7 @@ r('GET', '/api/analytics/audience', async ({ db, url }) => {
 r('GET', '/api/voice', async ({ db }) => json({ voice: await kvGet(db, 'voice', '') }));
 r('PUT', '/api/voice', async ({ db, body }) => { await kvSet(db, 'voice', body.voice || ''); return json({ ok: true }); });
 r('POST', '/api/ai/:kind', async ({ db, p, body }) => {
+  await core.enforce(db, 'aiCredits');
   const voice = body.voice ?? await kvGet(db, 'voice', '');
   const k = p.kind;
   if (k === 'ready') {
@@ -315,6 +324,8 @@ r('POST', '/api/tools/bulk-delete', async ({ db, body }) => {
   return json({ deleted: n });
 });
 
+install(r, { json, fail });
+
 /* ---- API keys ---- */
 r('GET', '/api/keys', async ({ db }) => json(await db.all('SELECT id,name,created_at FROM api_keys')));
 r('POST', '/api/keys', async ({ db, body }) => {
@@ -342,7 +353,7 @@ export async function handle(req, env, db) {
     let body = {};
     if (['POST', 'PUT', 'PATCH'].includes(req.method)) { try { body = await req.json(); } catch {} }
     try { return await fn({ req, url, db, env, p: m.groups || {}, body }); }
-    catch (e) { return fail(e.message, e.status && e.status < 600 && e.status >= 400 ? 502 : 500); }
+    catch (e) { return fail(e.message, e.limit ? 429 : e.status && e.status < 600 && e.status >= 400 ? 502 : 500); }
   }
   return fail('Not found', 404);
 }

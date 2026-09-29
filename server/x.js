@@ -1,6 +1,5 @@
 import { config } from './config.js';
 
-const API = 'https://api.x.com/2';
 export const SCOPES = 'tweet.read tweet.write tweet.moderate.write users.read follows.read like.read like.write offline.access dm.read dm.write media.write bookmark.read';
 
 const b64u = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -16,7 +15,7 @@ export function authUrl(state, challenge) {
     redirect_uri: `${config.baseUrl}/auth/x/callback`, scope: SCOPES,
     state, code_challenge: challenge, code_challenge_method: 'S256',
   });
-  return `https://x.com/i/oauth2/authorize?${q}`;
+  return `${config.xAuthBase}?${q}`;
 }
 
 function basicHeader() {
@@ -26,7 +25,7 @@ function basicHeader() {
 }
 
 async function tokenRequest(params) {
-  const r = await fetch(`${API}/oauth2/token`, {
+  const r = await fetch(`${config.xApiBase}/oauth2/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...basicHeader() },
     body: new URLSearchParams({ client_id: config.xClientId, ...params }),
@@ -56,7 +55,7 @@ export class XClient {
   }
 
   async req(method, path, { query, body, form } = {}) {
-    const url = new URL(API + path);
+    const url = new URL(config.xApiBase + path);
     if (query) for (const [k, v] of Object.entries(query)) if (v != null) url.searchParams.set(k, v);
     const headers = { Authorization: `Bearer ${await this.token()}` };
     let payload;
@@ -109,10 +108,10 @@ export class XClient {
   like(id) { return this.req('POST', `/users/${this.acc.x_user_id}/likes`, { body: { tweet_id: id } }); }
   sendDm(userId, text) { return this.req('POST', `/dm_conversations/with/${userId}/messages`, { body: { text } }); }
 
-  timeline({ max = 100, sinceId } = {}) {
+  timeline({ max = 100, sinceId, page } = {}) {
     return this.req('GET', `/users/${this.acc.x_user_id}/tweets`, {
       query: {
-        max_results: Math.min(max, 100), since_id: sinceId,
+        max_results: Math.min(max, 100), since_id: sinceId, pagination_token: page,
         'tweet.fields': 'created_at,public_metrics,non_public_metrics,referenced_tweets,attachments,entities',
         exclude: 'retweets',
       },
@@ -122,7 +121,7 @@ export class XClient {
   mentions(max = 50) {
     return this.req('GET', `/users/${this.acc.x_user_id}/mentions`, {
       query: {
-        max_results: max, expansions: 'author_id', 'tweet.fields': 'created_at,public_metrics,conversation_id',
+        max_results: max, expansions: 'author_id', 'tweet.fields': 'created_at,public_metrics,conversation_id,referenced_tweets',
         'user.fields': 'username,name,profile_image_url,public_metrics',
       },
     });
@@ -141,9 +140,9 @@ export class XClient {
     return this.req('GET', `/users/by/username/${u}`, { query: { 'user.fields': 'public_metrics,profile_image_url,description,created_at' } });
   }
 
-  userTweets(userId, max = 20) {
+  userTweets(userId, max = 20, { replies = false } = {}) {
     return this.req('GET', `/users/${userId}/tweets`, {
-      query: { max_results: max, exclude: 'retweets,replies', 'tweet.fields': 'created_at,public_metrics' },
+      query: { max_results: Math.min(Math.max(max, 5), 100), exclude: replies ? 'retweets' : 'retweets,replies', 'tweet.fields': 'created_at,public_metrics,referenced_tweets,attachments,entities' },
     });
   }
 
