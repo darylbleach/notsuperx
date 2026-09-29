@@ -1,0 +1,6 @@
+#nsx-fab{position:fixed;right:16px;bottom:16px;z-index:99999;width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#6d8bff,#8a5cff);color:#fff;font:700 18px system-ui;border:0;cursor:pointer;box-shadow:0 4px 16px #0006}
+#nsx-panel{position:fixed;right:16px;bottom:70px;width:340px;max-height:70vh;overflow:auto;z-index:99999;background:#14141b;color:#eceef3;border:1px solid #272734;border-radius:14px;padding:14px;font:13px/1.45 system-ui;display:none}
+#nsx-panel.open{display:block}#nsx-panel textarea{width:100%;min-height:80px;background:#1b1b25;color:#eceef3;border:1px solid #272734;border-radius:8px;padding:8px;box-sizing:border-box}
+#nsx-panel button,.nsx-btn{background:#6d8bff;color:#fff;border:0;border-radius:8px;padding:5px 10px;margin:4px 4px 0 0;cursor:pointer;font:600 12px system-ui}
+.nsx-btn{background:transparent;color:#8a5cff;border:1px solid #8a5cff55;margin-left:6px}
+#nsx-panel .s{display:inline-block;margin:4px 10px 4px 0}#nsx-panel .s b{display:block;font-size:16px}#nsx-panel .r{padding:6px;border:1px solid #272734;border-radius:8px;margin-top:6px;cursor:pointer}

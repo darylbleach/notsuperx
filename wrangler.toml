@@ -1,0 +1,24 @@
+name = "notsuperx"
+main = "server/worker.js"
+compatibility_date = "2025-06-01"
+
+[assets]
+directory = "./web"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/auth/*", "/mcp"]
+
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "notsuperx"
+database_id = "bf2f67e4-c41a-478e-b683-2587cc0273a7"
+migrations_dir = "migrations"
+
+[vars]
+BASE_URL = "https://notsuperx.YOUR-SUBDOMAIN.workers.dev"
+ANTHROPIC_MODEL = "claude-sonnet-5-5"
+# Secrets (set with `wrangler secret put`): APP_PASSWORD, SESSION_SECRET, X_CLIENT_ID, X_CLIENT_SECRET,
+# ANTHROPIC_API_KEY, BSKY_HANDLE, BSKY_APP_PASSWORD

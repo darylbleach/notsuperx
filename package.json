@@ -1,0 +1,14 @@
+{
+  "name": "notsuperx",
+  "version": "1.0.0",
+  "description": "Self-hosted X (Twitter) growth suite: scheduler, analytics, AI writer, automations, extension, API, CLI, MCP",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "bin": { "notsuperx": "cli/notsuperx.js" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/node.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js",
+    "deploy": "wrangler deploy"
+  },
+  "license": "MIT"
+}

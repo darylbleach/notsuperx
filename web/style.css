@@ -1,0 +1,32 @@
+:root{--bg:#0b0b0f;--panel:#14141b;--panel2:#1b1b25;--line:#272734;--fg:#eceef3;--mute:#8b8fa3;--acc:#6d8bff;--acc2:#8a5cff;--ok:#38d39f;--bad:#ff6b6b;--warn:#ffb84d}
+@media (prefers-color-scheme:light){:root{--bg:#f6f7fb;--panel:#fff;--panel2:#f0f1f7;--line:#e0e2ee;--fg:#14151c;--mute:#6a6f85}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,Segoe UI,Inter,sans-serif}
+a{color:var(--acc);text-decoration:none}
+.shell{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+nav{background:var(--panel);border-right:1px solid var(--line);padding:16px 10px;position:sticky;top:0;height:100vh;overflow:auto}
+nav h1{font-size:17px;margin:4px 10px 16px;letter-spacing:-.02em}nav h1 b{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;color:transparent}
+nav a{display:block;padding:8px 12px;border-radius:8px;color:var(--mute);margin-bottom:2px}nav a.on,nav a:hover{background:var(--panel2);color:var(--fg)}
+nav select{width:100%;margin:0 0 14px}
+main{padding:24px 28px;max-width:1200px;width:100%}
+h2{margin:0 0 16px;font-size:22px;letter-spacing:-.02em}h3{margin:0 0 10px;font-size:15px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.grid{display:grid;gap:14px}.g2{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}.g4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}.stat small{color:var(--mute);display:block}.stat b{font-size:24px}
+input,select,textarea{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;width:100%}
+textarea{min-height:110px;resize:vertical}
+button,.btn{background:linear-gradient(90deg,var(--acc),var(--acc2));color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+button.ghost{background:var(--panel2);color:var(--fg);border:1px solid var(--line)}button.danger{background:var(--bad)}button:disabled{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>*{flex:0 0 auto}.grow{flex:1 1 auto!important}
+label{display:block;color:var(--mute);font-size:12px;margin:10px 0 4px}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mute);font-weight:500;font-size:12px}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;background:var(--panel2);border:1px solid var(--line)}
+.tag.posted{color:var(--ok)}.tag.failed{color:var(--bad)}.tag.scheduled{color:var(--acc)}.tag.draft{color:var(--mute)}
+.mute{color:var(--mute)}.count{font-size:12px;color:var(--mute)}.count.over{color:var(--bad)}
+.post{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--panel2);white-space:pre-wrap}
+.bars{display:flex;align-items:flex-end;gap:3px;height:120px}.bars i{flex:1;background:linear-gradient(var(--acc),var(--acc2));border-radius:3px 3px 0 0;min-height:2px;position:relative}
+.heat{display:grid;grid-template-columns:34px repeat(24,1fr);gap:2px;font-size:10px}.heat span{aspect-ratio:1;border-radius:3px;background:var(--panel2)}
+.login{max-width:340px;margin:18vh auto}.toast{position:fixed;bottom:18px;right:18px;background:var(--panel);border:1px solid var(--line);padding:10px 14px;border-radius:10px;z-index:9}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.cal>div{background:var(--panel2);border:1px solid var(--line);border-radius:8px;min-height:90px;padding:6px;font-size:12px}.cal .d{color:var(--mute)}
+canvas{max-width:100%;border-radius:12px;border:1px solid var(--line)}
+pre{white-space:pre-wrap;background:var(--panel2);padding:10px;border-radius:8px;overflow:auto}
+@media(max-width:800px){.shell{grid-template-columns:1fr}nav{position:static;height:auto;display:flex;flex-wrap:wrap;gap:4px}nav h1,nav select{width:100%}main{padding:14px}}
